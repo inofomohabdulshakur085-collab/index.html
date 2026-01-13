@@ -1,0 +1,364 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8"/>
+<meta name="viewport" content="width=device-width,initial-scale=1"/>
+<title>Robotic Dashboard — All-in-One</title>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;600;700&display=swap" rel="stylesheet">
+<style>
+:root{--bg:#071022;--card:#0b1724;--muted:#9aa6b2;--accent:#4fd1c5;--accent2:#60a5fa}
+*{box-sizing:border-box}html,body{height:100%}body{margin:0;font-family:Inter,system-ui,Arial;background:linear-gradient(180deg,var(--bg),#01121a);color:#e6eef6;padding:12px}
+.app{max-width:1200px;margin:0 auto;display:grid;grid-template-columns:1fr 380px;gap:12px}
+header{grid-column:1/-1;display:flex;justify-content:space-between;align-items:center;padding:12px;border-radius:10px;background:linear-gradient(90deg,rgba(255,255,255,0.02),transparent)}
+h1{margin:0;font-size:1.05rem}
+.small{color:var(--muted);font-size:0.9rem}
+.card{background:rgba(255,255,255,0.02);padding:12px;border-radius:10px}
+.kpis{display:flex;gap:10px;margin-bottom:10px}
+.kpi{flex:1;padding:10px;border-radius:8px;background:rgba(255,255,255,0.02);text-align:center}
+.value{font-weight:700;font-size:1.2rem}
+#scene{width:100%;height:420px;border-radius:8px;background:#00171a}
+canvas{background:linear-gradient(180deg,#021224,#061b29);border-radius:8px}
+.controls{display:flex;flex-direction:column;gap:8px}
+.joystick{width:160px;height:160px;border-radius:12px;background:linear-gradient(180deg,#021821,#03262b);display:grid;place-items:center;touch-action:none;user-select:none}
+.console{height:160px;overflow:auto;background:#06141a;padding:10px;border-radius:8px;font-family:monospace}
+.btn{padding:8px;border-radius:8px;background:linear-gradient(90deg,var(--accent),var(--accent2));border:none;color:#04202a;font-weight:700;cursor:pointer}
+.ghost{background:transparent;border:1px solid rgba(255,255,255,0.06);color:var(--muted);font-weight:600}
+.footer{grid-column:1/-1;text-align:center;color:var(--muted);margin-top:8px}
+@media(max-width:980px){.app{grid-template-columns:1fr}.sidebar{order:3}#scene{height:300px} .joystick{width:120px;height:120px}}
+</style>
+</head>
+<body>
+<div class="app">
+<header>
+  <div>
+    <h1>Robotic Dashboard — All-in-One</h1>
+    <div class="small">Standalone simulator · 3D viz · joystick · mission planner · recording</div>
+  </div>
+  <div style="display:flex;gap:10px;align-items:center">
+    <select id="mode"><option>Manual</option><option>Assisted</option><option>Autonomous</option></select>
+    <button id="downloadZip" class="btn">Download HTML</button>
+  </div>
+</header>
+
+<main class="card">
+  <div class="kpis">
+    <div class="kpi"><div class="small">Speed</div><div id="k-speed" class="value">0.00</div></div>
+    <div class="kpi"><div class="small">Battery</div><div id="k-batt" class="value">100%</div></div>
+    <div class="kpi"><div class="small">Temp</div><div id="k-temp" class="value">24.2°C</div></div>
+  </div>
+
+  <div id="scene"></div>
+
+  <div style="display:flex;gap:12px;margin-top:12px">
+    <div style="flex:1" class="card">
+      <strong>Telemetry</strong>
+      <canvas id="chart" width="600" height="160"></canvas>
+      <div style="display:flex;gap:8px;margin-top:8px">
+        <input id="cmdInput" placeholder="move 1.0 0.0 / turn 90" style="flex:1;padding:8px;border-radius:6px;background:transparent;border:1px solid rgba(255,255,255,0.04)">
+        <button id="enqueue" class="btn">Enqueue</button>
+        <button id="clearQueue" class="ghost">Clear</button>
+      </div>
+      <div style="margin-top:8px;font-family:monospace" id="queue"></div>
+    </div>
+
+    <aside class="sidebar card" style="width:360px">
+      <div style="display:flex;justify-content:space-between;align-items:center">
+        <strong>Controls</strong><div class="small">Joystick · Gamepad</div>
+      </div>
+
+      <div class="controls" style="margin-top:8px">
+        <div><label class="small">Speed</label><input id="speed" type="range" min="0" max="2" step="0.01" value="0.4"></div>
+        <div style="display:flex;gap:8px;align-items:center">
+          <div id="joy" class="joystick">◉</div>
+          <div style="flex:1;display:flex;flex-direction:column;gap:6px">
+            <button id="btnFwd" class="btn">Forward</button>
+            <div style="display:flex;gap:6px"><button id="btnLeft" class="ghost">Left</button><button id="btnRight" class="ghost">Right</button></div>
+            <div style="display:flex;gap:6px"><button id="home" class="ghost">HOME</button><button id="dock" class="ghost">DOCK</button></div>
+          </div>
+        </div>
+
+        <div style="margin-top:6px"><strong class="small">Mission</strong>
+          <div style="display:flex;gap:8px;margin-top:8px">
+            <button id="addWP" class="btn">Add WP</button><button id="planPath" class="btn">Plan</button><button id="goPath" class="btn">Go</button>
+          </div>
+        </div>
+
+        <div style="margin-top:8px"><strong class="small">Recording</strong>
+          <div style="display:flex;gap:8px;margin-top:8px">
+            <button id="recStart" class="btn">Start</button><button id="recStop" class="btn">Stop</button><button id="saveRec" class="btn">Save</button>
+          </div>
+        </div>
+
+        <div style="margin-top:8px"><strong class="small">Activity Console</strong>
+          <div class="console" id="console"></div>
+        </div>
+
+        <div style="display:flex;gap:8px;margin-top:8px">
+          <button id="exportJSON" class="btn">Export JSON</button>
+          <button id="reset" class="ghost">Reset</button>
+        </div>
+      </div>
+    </aside>
+  </div>
+</main>
+
+<aside class="card sidebar">
+  <div><strong>Robots</strong><div id="robots" class="small"></div></div>
+  <div style="margin-top:8px"><strong class="small">Selected</strong><div id="selected" class="small">robot-01</div></div>
+  <div style="margin-top:8px"><strong class="small">Playback</strong>
+    <div style="display:flex;gap:8px;margin-top:8px"><button id="playRec" class="btn">Play</button><button id="stopRec" class="ghost">Stop</button></div>
+  </div>
+</aside>
+
+<footer class="footer">Single-file, standalone — progressive enhancements inside.</footer>
+</div>
+
+<!-- libs -->
+<script src="https://cdn.jsdelivr.net/npm/three@0.157.0/build/three.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/chart.js@4.3.0/dist/chart.umd.min.js"></script>
+
+<script>
+// ------------ state --------------
+const robots = {};
+let selected = 'robot-01';
+let telemetry = {}; // per-robot buffers
+let recording = false;
+let recordings = {}; // id -> samples
+let currentRec = null;
+
+// local simulator state (single combined simulation for simplicity)
+const sim = {
+  robots: {},
+  stepMs: 50,
+  running: true
+};
+
+// create initial robots
+for(let i=1;i<=3;i++){
+  const id = 'robot-'+String(i).padStart(2,'0');
+  sim.robots[id] = { robot_id:id, x:(Math.random()*4-2), y:(Math.random()*4-2), theta:Math.random()*360, speed:0.3, battery:90+Math.random()*10, temp:22+Math.random()*3, lidar:[], queue:[], path:[] };
+  telemetry[id] = { t:[], speed:[], battery:[] };
+}
+
+// ------------ UI refs -------------
+const kSpeed = document.getElementById('k-speed');
+const kBatt = document.getElementById('k-batt');
+const kTemp = document.getElementById('k-temp');
+const consoleEl = document.getElementById('console');
+const queueEl = document.getElementById('queue');
+const robotsEl = document.getElementById('robots');
+const selectedEl = document.getElementById('selected');
+
+function log(msg){ const ts=new Date().toLocaleTimeString(); consoleEl.innerHTML = '['+ts+'] '+msg+'<br>'+consoleEl.innerHTML; }
+
+// --------- Chart.js ---------
+const ctx = document.getElementById('chart').getContext('2d');
+const chart = new Chart(ctx, { type:'line', data:{ labels:[], datasets:[{label:'Speed',data:[],tension:0.3},{label:'Battery',data:[],yAxisID:'y1',tension:0.3}] }, options:{animation:false,scales:{x:{display:false}, y:{min:0,max:2}, y1:{position:'right',min:0,max:100}}} });
+
+function pushTelemetry(id, t, s, b){
+  const buf = telemetry[id];
+  buf.t.push(t); buf.speed.push(s); buf.battery.push(b);
+  while(buf.t.length>600){ buf.t.shift(); buf.speed.shift(); buf.battery.shift(); }
+  if(selected===id) updateChart(id);
+}
+
+function updateChart(id){
+  const buf = telemetry[id];
+  chart.data.labels = buf.t.map(x=>new Date(x*1000).toLocaleTimeString());
+  chart.data.datasets[0].data = buf.speed;
+  chart.data.datasets[1].data = buf.battery;
+  chart.update('none');
+}
+
+// ---------- Three.js 3D scene ---------
+let scene, camera, renderer;
+const robotMeshes = {};
+function initScene(){
+  const container = document.getElementById('scene');
+  renderer = new THREE.WebGLRenderer({antialias:true});
+  renderer.setSize(container.clientWidth, 420);
+  container.appendChild(renderer.domElement);
+  scene = new THREE.Scene();
+  scene.background = new THREE.Color(0x04151a);
+  camera = new THREE.PerspectiveCamera(60, container.clientWidth/420, 0.1, 1000);
+  camera.position.set(0,8,8); camera.lookAt(0,0,0);
+  const light = new THREE.DirectionalLight(0xffffff,0.9); light.position.set(5,10,7); scene.add(light);
+  scene.add(new THREE.AmbientLight(0x404040,0.6));
+  const ground = new THREE.Mesh(new THREE.PlaneGeometry(20,20), new THREE.MeshPhongMaterial({color:0x032427}));
+  ground.rotation.x = -Math.PI/2; scene.add(ground);
+  // walls/obstacles
+  const box = new THREE.Mesh(new THREE.BoxGeometry(2,0.6,0.2), new THREE.MeshPhongMaterial({color:0x2a2a2a}));
+  box.position.set(0,0.3,-1); scene.add(box);
+  animate();
+}
+
+function animate(){ requestAnimationFrame(animate); renderer.render(scene,camera); }
+
+function addOrUpdateRobot(id, state){
+  if(!robotMeshes[id]){
+    const mesh = new THREE.Mesh(new THREE.BoxGeometry(0.6,0.3,0.4), new THREE.MeshStandardMaterial({color: Math.random()*0xffffff}));
+    const lidarGroup = new THREE.Group(); mesh.userData.lidar = lidarGroup; scene.add(mesh); scene.add(lidarGroup); robotMeshes[id] = mesh;
+  }
+  const m = robotMeshes[id];
+  m.position.set(state.x, 0.15, -state.y);
+  m.rotation.y = -state.theta * Math.PI/180;
+  // update lidar lines
+  const g = m.userData.lidar; g.clear();
+  if(state.lidar && state.lidar.length){
+    state.lidar.forEach(r=>{
+      const angle = r.angle + state.theta*Math.PI/180;
+      const x = state.x + Math.cos(angle)*r.dist;
+      const z = -state.y + Math.sin(angle)*r.dist;
+      const geom = new THREE.BufferGeometry().setFromPoints([ new THREE.Vector3(state.x,0.15,-state.y), new THREE.Vector3(x,0.15,z) ]);
+      const line = new THREE.Line(geom, new THREE.LineBasicMaterial({color:0x66ffcc, transparent:true, opacity:0.7}));
+      g.add(line);
+    });
+  }
+}
+
+// --------------- Simulation core ----------------
+let lastSim = performance.now();
+function simStep(ts){
+  const dt = Math.min((ts - lastSim)/1000, 0.1); lastSim = ts;
+  for(const id in sim.robots){
+    const r = sim.robots[id];
+    // simple path following
+    if(r.path && r.path.length>0){
+      const tgt = r.path[0]; const dx = tgt.x - r.x, dy = tgt.y - r.y; const d = Math.hypot(dx,dy);
+      if(d < 0.06) r.path.shift();
+      else {
+        const ang = Math.atan2(dy,dx); r.theta = (ang*180/Math.PI+360)%360; const sp = r.speed;
+        r.x += Math.cos(ang)*sp*dt; r.y += Math.sin(ang)*sp*dt;
+      }
+    } else {
+      // drift forward
+      const ang = r.theta * Math.PI/180;
+      r.x += Math.cos(ang)*r.speed*dt; r.y += Math.sin(ang)*r.speed*dt;
+    }
+    // lidar sim
+    r.lidar = [];
+    const rays = 36;
+    for(let i=0;i<rays;i++){ const a = (i/rays)*Math.PI*2; const dist = 0.6 + Math.random()*2.5; r.lidar.push({angle:a, dist:dist}); }
+    // battery/temp dynamics
+    r.battery = Math.max(0, r.battery - 0.005*r.speed*dt);
+    r.temp += ((Math.abs(r.speed)*0.02) - (r.temp - 22)*0.01) * dt;
+    // push telemetry
+    pushTelemetry(r.robot_id, Date.now()/1000, r.speed, r.battery);
+    // update mesh & UI if selected
+    addOrUpdateRobot(r.robot_id, r);
+    if(r.robot_id === selected){ kSpeed.textContent = r.speed.toFixed(2); kBatt.textContent = Math.round(r.battery)+'%'; kTemp.textContent = r.temp.toFixed(1)+'°C'; }
+  }
+  requestAnimationFrame(simStep);
+}
+requestAnimationFrame(simStep);
+
+// -------------- Command queue & execution ---------------
+function enqueue(cmd){
+  const id = selected;
+  if(!id) return;
+  sim.robots[id].queue.push(cmd);
+  renderQueue();
+  log('Enqueued on '+id+': '+cmd);
+}
+
+function renderQueue(){
+  const id = selected; const q = sim.robots[id]?.queue || [];
+  queueEl.innerHTML = q.length ? q.map((c,i)=>`<div>#${i+1} ${c}</div>`).join('') : '<div style="color:var(--muted)">empty</div>';
+}
+
+function executeQueueFor(id){
+  const r = sim.robots[id];
+  if(!r || r._running) return;
+  const cmd = r.queue.shift();
+  if(!cmd) return;
+  r._running = true;
+  log('Executing '+cmd+' on '+id);
+  const parts = cmd.split(/\s+/);
+  if(parts[0]==='move'){ const dist = parseFloat(parts[1]||0); const dir = parseFloat(parts[2]||0); const ttheta = (r.theta + dir)%360; const steps = Math.max(6, Math.round(dist*20)); let i=0; const d = dist/steps; const iv = setInterval(()=>{ r.x += Math.cos(ttheta*Math.PI/180)*d; r.y += Math.sin(ttheta*Math.PI/180)*d; if(++i>=steps){ clearInterval(iv); r._running=false; log('Completed move'); } }, 60); }
+  else if(parts[0]==='turn'){ const deg = parseFloat(parts[1]||0); const steps = Math.max(4, Math.round(Math.abs(deg)/5)); let i=0; const sign = Math.sign(deg); const iv = setInterval(()=>{ r.theta = (r.theta + sign*5)%360; if(++i>=steps){ clearInterval(iv); r._running=false; log('Completed turn'); } },80); }
+  else if(parts[0]==='home'){ r.queue.unshift('move '+Math.hypot(r.x,r.y).toFixed(2)+' 0'); r._running=false; }
+  else { log('Unknown cmd'); r._running=false; }
+  renderQueue();
+}
+
+// periodic queue executor
+setInterval(()=>{ for(const id in sim.robots){ if(sim.robots[id].queue && sim.robots[id].queue.length && !sim.robots[id]._running) executeQueueFor(id); } }, 300);
+
+// -------------- UI Wiring ----------------
+document.getElementById('enqueue').addEventListener('click', ()=>{ const v=document.getElementById('cmdInput').value.trim(); if(!v) return; enqueue(v); document.getElementById('cmdInput').value=''; });
+document.getElementById('clearQueue').addEventListener('click', ()=>{ sim.robots[selected].queue=[]; renderQueue(); log('Queue cleared'); });
+document.getElementById('btnFwd').addEventListener('click', ()=>{ enqueue('move 0.5 0'); });
+document.getElementById('btnLeft').addEventListener('click', ()=>{ enqueue('turn -30'); });
+document.getElementById('btnRight').addEventListener('click', ()=>{ enqueue('turn 30'); });
+document.getElementById('home').addEventListener('click', ()=>{ enqueue('home'); });
+document.getElementById('dock').addEventListener('click', ()=>{ log('Dock simulated'); });
+document.getElementById('reset').addEventListener('click', ()=>{ for(const id in sim.robots){ const r=sim.robots[id]; r.x=0;r.y=0;r.theta=0;r.speed=0.4;r.battery=100;r.queue=[]; } log('Reset all'); });
+document.getElementById('speed').addEventListener('input', (e)=>{ const v=Number(e.target.value); sim.robots[selected].speed=v; });
+
+// joystick implementation (pointer + smoothing)
+const joyEl = document.getElementById('joy');
+let joyState={x:0,y:0,active:false,vx:0,vy:0};
+joyEl.addEventListener('pointerdown', e=>{ joyEl.setPointerCapture(e.pointerId); joyState.active=true; handleJoy(e); });
+joyEl.addEventListener('pointermove', e=>{ if(joyState.active) handleJoy(e); });
+joyEl.addEventListener('pointerup', e=>{ joyState.active=false; joyState.vx=0; joyState.vy=0; });
+function handleJoy(e){
+  const r = joyEl.getBoundingClientRect(); const cx=r.left+r.width/2, cy=r.top+r.height/2;
+  const nx = (e.clientX - cx)/(r.width/2); const ny = (e.clientY - cy)/(r.height/2);
+  joyState.vx = Math.max(-1,Math.min(1,nx)); joyState.vy = Math.max(-1,Math.min(1,ny));
+  // smoothing
+  joyState.x += (joyState.vx - joyState.x)*0.25; joyState.y += (joyState.vy - joyState.y)*0.25;
+  // apply to robot
+  const forward = -joyState.y; const turn = joyState.x;
+  sim.robots[selected].speed = Math.max(0, forward*1.6);
+  sim.robots[selected].theta += turn*2;
+}
+
+// gamepad
+let gpIndex = null;
+window.addEventListener('gamepadconnected', e=>{ gpIndex=e.gamepad.index; log('Gamepad connected'); pollGamepad(); });
+function pollGamepad(){ if(gpIndex===null) return; const gp = navigator.getGamepads()[gpIndex]; if(!gp) return; const lx=gp.axes[0], ly=gp.axes[1]; sim.robots[selected].speed = Math.max(0, -ly*1.6); sim.robots[selected].theta += lx*2; requestAnimationFrame(pollGamepad); }
+
+// mission / path (client-side simple straight-line waypoint list)
+let waypoints=[];
+document.getElementById('addWP').addEventListener('click', ()=>{ const wp={x:(Math.random()*6-3), y:(Math.random()*6-3)}; waypoints.push(wp); log('Added WP '+JSON.stringify(wp)); });
+document.getElementById('planPath').addEventListener('click', ()=>{ if(waypoints.length===0) return alert('No waypoints'); const path = waypoints.slice(); sim.robots[selected].path = path; log('Planned path with '+path.length+' points'); });
+document.getElementById('goPath').addEventListener('click', ()=>{ if(sim.robots[selected].path && sim.robots[selected].path.length){ log('Starting path'); } });
+
+// recording
+document.getElementById('recStart').addEventListener('click', ()=>{ currentRec = 'rec-'+Date.now(); recordings[currentRec]=[]; recording=true; log('Recording '+currentRec); });
+document.getElementById('recStop').addEventListener('click', ()=>{ recording=false; log('Stopped recording'); });
+document.getElementById('saveRec').addEventListener('click', ()=>{ if(!currentRec) return alert('No recording'); const data = recordings[currentRec]; const blob = new Blob([JSON.stringify(data,null,2)], {type:'application/json'}); const url = URL.createObjectURL(blob); const a=document.createElement('a'); a.href=url; a.download=currentRec+'.json'; a.click(); URL.revokeObjectURL(url); log('Saved recording '+currentRec); });
+
+// playback (very simple)
+let playing=false, playIdx=0, playBuf=[];
+document.getElementById('playRec').addEventListener('click', ()=>{ if(!currentRec || !recordings[currentRec]) return alert('No recording to play'); playBuf = recordings[currentRec]; playing=true; playIdx=0; log('Playing '+currentRec); playbackStep(); });
+document.getElementById('stopRec').addEventListener('click', ()=>{ playing=false; log('Stopped playback'); });
+function playbackStep(){ if(!playing) return; if(playIdx>=playBuf.length){ playing=false; log('Playback finished'); return; } const m = playBuf[playIdx++]; if(m && m.robot_id && m.pose){ sim.robots[m.robot_id].x = m.pose.x; sim.robots[m.robot_id].y = m.pose.y; sim.robots[m.robot_id].theta = m.pose.theta; addOrUpdateRobot(m.robot_id, sim.robots[m.robot_id]); } setTimeout(playbackStep, 100); }
+
+// auto save telemetry into recordings when recording=true
+setInterval(()=>{ if(recording && currentRec){ const snap=[]; for(const id in sim.robots){ const r=sim.robots[id]; snap.push({robot_id:id, t:Date.now()/1000, pose:{x:r.x,y:r.y,theta:r.theta}, speed:r.speed, battery:r.battery}); } recordings[currentRec].push(...snap); } }, 200);
+
+// export current snapshot JSON
+document.getElementById('exportJSON').addEventListener('click', ()=>{ const payload = { robots: sim.robots, telemetry }; const blob = new Blob([JSON.stringify(payload, null, 2)], {type:'application/json'}); const url = URL.createObjectURL(blob); const a=document.createElement('a'); a.href=url; a.download='robotic_snapshot.json'; a.click(); URL.revokeObjectURL(url); log('Exported snapshot'); });
+
+// populate robots list
+function refreshRobotsUI(){ robotsEl.innerHTML = Object.keys(sim.robots).map(id=>`<div style="cursor:pointer" onclick="selectRobot('${id}')">${id}</div>`).join(''); }
+function selectRobot(id){ selected=id; selectedEl.textContent = id; renderQueue(); updateChart(id); log('Selected '+id); }
+window.selectRobot = selectRobot;
+
+// init
+initScene();
+refreshRobotsUI();
+selectRobot('robot-01');
+log('All-in-one dashboard ready');
+
+// download HTML button: save current document as single-file HTML
+document.getElementById('downloadZip').addEventListener('click', ()=>{
+  const htmlContent = '<!doctype html>\n' + document.documentElement.outerHTML;
+  const blob = new Blob([htmlContent], {type:'text/html'});
+  const a = document.createElement('a'); a.href = URL.createObjectURL(blob); a.download = 'robotic-dashboard.html'; a.click(); URL.revokeObjectURL(a.href);
+  log('Downloaded single-file HTML (use Save As to keep it).');
+});
+</script>
+</body>
+</html>
